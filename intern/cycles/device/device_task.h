@@ -114,6 +114,7 @@ class DeviceTask : public Task {
 
   bool need_finish_queue;
   bool integrator_branched;
+  bool integrator_adaptive;  
 
  protected:
   double last_update_time;

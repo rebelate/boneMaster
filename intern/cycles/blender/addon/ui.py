@@ -246,9 +246,15 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
         row = layout.row(align=True)
         row.prop(cscene, "seed")
         row.prop(cscene, "use_animated_seed", text="", icon='TIME')
+        row.prop(cscene, "use_adaptive_sampling", text="Adaptive Sampling")
 
         layout.prop(cscene, "sampling_pattern", text="Pattern")
         layout.prop(cscene, "scrambling_distance")
+        layout.active = cscene.use_adaptive_sampling
+        if cscene.use_adaptive_sampling:
+            layout.prop(cscene, "adaptive_min_samples", text="Adaptive Min Samples")
+            layout.prop(cscene, "adaptive_threshold", text="Adaptive Threshold")        
+        
 
         layout.prop(cscene, "use_square_samples")
 
@@ -809,6 +815,8 @@ class CYCLES_RENDER_PT_passes_data(CyclesButtonsPanel, Panel):
         col.prop(cycles_view_layer, "denoising_store_passes", text="Denoising Data")
         col = flow.column()
         col.prop(cycles_view_layer, "pass_debug_render_time", text="Render Time")
+        col = flow.column()
+        col.prop(cycles_view_layer, "pass_debug_sample_count", text="Sample Count")
 
         layout.separator()
 
