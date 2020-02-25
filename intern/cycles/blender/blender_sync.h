@@ -71,7 +71,9 @@ class BlenderSync {
                  int height,
                  void **python_thread_state);
   void sync_view_layer(BL::SpaceView3D &b_v3d, BL::ViewLayer &b_view_layer);
-  vector<Pass> sync_render_passes(BL::RenderLayer &b_render_layer, BL::ViewLayer &b_view_layer);
+  vector<Pass> sync_render_passes(BL::RenderLayer &b_render_layer,
+                                  BL::ViewLayer &b_view_layer,
+                                  bool adaptive_sampling);
   void sync_integrator();
   void sync_camera(BL::RenderSettings &b_render,
                    BL::Object &b_override,
@@ -213,6 +215,9 @@ class BlenderSync {
   void *world_map;
   bool world_recalc;
   BlenderViewportParameters viewport_parameters;
+
+  unordered_map<string, uint> lightgroup_map;
+  vector<std::pair<BL::Collection, bool>> lightgroups;
 
   Scene *scene;
   bool preview;

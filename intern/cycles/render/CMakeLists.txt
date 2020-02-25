@@ -24,6 +24,7 @@ set(SRC
   hair.cpp
   image.cpp
   integrator.cpp
+  jitter.cpp
   light.cpp
   merge.cpp
   mesh.cpp
@@ -62,6 +63,7 @@ set(SRC_HEADERS
   image.h
   integrator.h
   light.h
+  jitter.h
   merge.h
   mesh.h
   nodes.h
@@ -89,6 +91,14 @@ set(LIB
 if(WITH_CYCLES_OSL)
   list(APPEND LIB
     cycles_kernel_osl
+  )
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+  add_definitions(-DWITH_OPENIMAGEDENOISE)
+  add_definitions(-DOIDN_STATIC_LIB)
+  list(APPEND INC_SYS
+    ${OPENIMAGEDENOISE_INCLUDE_DIRS}
   )
 endif()
 

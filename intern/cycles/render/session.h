@@ -55,6 +55,7 @@ class SessionParams {
   int start_resolution;
   int pixel_size;
   int threads;
+  bool adaptive_sampling;
 
   bool use_profiling;
 
@@ -65,6 +66,7 @@ class SessionParams {
   bool full_denoising;
   bool optix_denoising;
   DenoiseParams denoising;
+  int viewport_denoising_samples;
 
   double cancel_timeout;
   double reset_timeout;
@@ -87,6 +89,7 @@ class SessionParams {
     start_resolution = INT_MAX;
     pixel_size = 1;
     threads = 0;
+    adaptive_sampling = false;
 
     use_profiling = false;
 
@@ -104,6 +107,8 @@ class SessionParams {
 
     shadingsystem = SHADINGSYSTEM_SVM;
     tile_order = TILE_CENTER;
+
+    viewport_denoising_samples = 4;
   }
 
   bool modified(const SessionParams &params)
@@ -114,12 +119,14 @@ class SessionParams {
              && progressive == params.progressive && experimental == params.experimental &&
              tile_size == params.tile_size && start_resolution == params.start_resolution &&
              pixel_size == params.pixel_size && threads == params.threads &&
+             adaptive_sampling == params.adaptive_sampling &&
              use_profiling == params.use_profiling &&
              display_buffer_linear == params.display_buffer_linear &&
              cancel_timeout == params.cancel_timeout && reset_timeout == params.reset_timeout &&
              text_timeout == params.text_timeout &&
              progressive_update_timeout == params.progressive_update_timeout &&
-             tile_order == params.tile_order && shadingsystem == params.shadingsystem);
+             tile_order == params.tile_order && shadingsystem == params.shadingsystem &&
+             viewport_denoising_samples == params.viewport_denoising_samples);
   }
 };
 

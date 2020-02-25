@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Blender Foundation
+ * Copyright 2019 Blender Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef __SOBOL_H__
-#define __SOBOL_H__
+#include "kernel/kernel_compat_opencl.h"
+#include "kernel/split/kernel_split_common.h"
+#include "kernel/split/kernel_adaptive_filter_x.h"
 
-#include "util/util_types.h"
-
-CCL_NAMESPACE_BEGIN
-
-#define SOBOL_BITS 32
-#define SOBOL_MAX_DIMENSIONS 21201
-
-void sobol_generate_direction_vectors(uint vectors[][SOBOL_BITS], int dimensions);
-
-int sobol_dither_matrix_size();
-void sobol_generate_dither_matrix(float2 *matrix);
-
-CCL_NAMESPACE_END
-
-#endif /* __SOBOL_H__ */
+#define KERNEL_NAME adaptive_filter_x
+#include "kernel/kernels/opencl/kernel_split_function.h"
+#undef KERNEL_NAME

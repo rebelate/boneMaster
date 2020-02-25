@@ -42,6 +42,7 @@
 CCL_NAMESPACE_BEGIN
 
 static const char *cryptomatte_prefix = "Crypto";
+static const char *lightgroup_postfix = ".Combined";
 
 /* Constructor */
 
@@ -275,9 +276,24 @@ void BlenderSync::sync_integrator()
     }
   }
 
-  integrator->sampling_pattern = (SamplingPattern)get_enum(
-      cscene, "sampling_pattern", SAMPLING_NUM_PATTERNS, SAMPLING_PATTERN_SOBOL);
+  int sampling_pattern = get_enum(cscene, "sampling_pattern");
+	switch(sampling_pattern) {
+		case 1: /* Dithered Sobol */
+			integrator->sampling_pattern = SAMPLING_PATTERN_SOBOL;
+			integrator->use_dithered_sampling = true;
+			break;
+		case 2: /* Correlated Multi-Jittered */
+			integrator->sampling_pattern = SAMPLING_PATTERN_CMJ;
+			integrator->use_dithered_sampling = false;
+			break;
+		case 0: /* Sobol */
+		default:
+			integrator->sampling_pattern = SAMPLING_PATTERN_SOBOL;
+			integrator->use_dithered_sampling = false;
+			break;
+	}
 
+  integrator->scrambling_distance = get_float(cscene, "scrambling_distance");
   integrator->sample_clamp_direct = get_float(cscene, "sample_clamp_direct");
   integrator->sample_clamp_indirect = get_float(cscene, "sample_clamp_indirect");
   if (!preview) {
@@ -296,6 +312,16 @@ void BlenderSync::sync_integrator()
   integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
   integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");
 
+  if (RNA_boolean_get(&cscene, "use_adaptive_sampling")) {
+    integrator->sampling_pattern = SAMPLING_PATTERN_PMJ;
+    integrator->adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
+    integrator->adaptive_threshold = get_float(cscene, "adaptive_threshold");
+  }
+  else {
+    integrator->adaptive_min_samples = INT_MAX;
+    integrator->adaptive_threshold = 0.0f;
+  }
+
   int diffuse_samples = get_int(cscene, "diffuse_samples");
   int glossy_samples = get_int(cscene, "glossy_samples");
   int transmission_samples = get_int(cscene, "transmission_samples");
@@ -312,6 +338,8 @@ void BlenderSync::sync_integrator()
     integrator->mesh_light_samples = mesh_light_samples * mesh_light_samples;
     integrator->subsurface_samples = subsurface_samples * subsurface_samples;
     integrator->volume_samples = volume_samples * volume_samples;
+    integrator->adaptive_min_samples = min(
+        integrator->adaptive_min_samples * integrator->adaptive_min_samples, INT_MAX);
   }
   else {
     integrator->diffuse_samples = diffuse_samples;
@@ -487,8 +515,13 @@ PassType BlenderSync::get_pass_type(BL::RenderPass &b_pass)
   MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
 #endif
   MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
+  MAP_PASS("AdaptiveAuxBuffer", PASS_ADAPTIVE_AUX_BUFFER);
+  MAP_PASS("Debug Sample Count", PASS_SAMPLE_COUNT);
   if (string_startswith(name, cryptomatte_prefix)) {
     return PASS_CRYPTOMATTE;
+  }
+  if (string_endswith(name, lightgroup_postfix)) {
+    return PASS_LIGHTGROUP;
   }
 #undef MAP_PASS
 
@@ -522,7 +555,9 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
   return -1;
 }
 
-vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_view_layer)
+vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
+                                             BL::ViewLayer &b_view_layer,
+                                             bool adaptive_sampling)
 {
   vector<Pass> passes;
 
@@ -600,6 +635,10 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
     b_engine.add_pass("Debug Render Time", 1, "X", b_view_layer.name().c_str());
     Pass::add(PASS_RENDER_TIME, passes, "Debug Render Time");
   }
+  if (get_boolean(crp, "pass_debug_sample_count")) {
+    b_engine.add_pass("Debug Sample Count", 1, "X", b_view_layer.name().c_str());
+    Pass::add(PASS_SAMPLE_COUNT, passes, "Debug Sample Count");
+  }
   if (get_boolean(crp, "use_pass_volume_direct")) {
     b_engine.add_pass("VolumeDir", 3, "RGB", b_view_layer.name().c_str());
     Pass::add(PASS_VOLUME_DIRECT, passes, "VolumeDir");
@@ -645,6 +684,34 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
     scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
                                                         CRYPT_ACCURATE);
   }
+  if (adaptive_sampling) {
+    Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes);
+    if (!get_boolean(crp, "pass_debug_sample_count")) {
+      Pass::add(PASS_SAMPLE_COUNT, passes);
+    }
+  }
+  /* TODO: Update existing lights when rendering with multiple render layers. */
+  lightgroups.clear();
+  list<string> lg_names;
+  RNA_BEGIN (&crp, lightgroup, "lightgroups") {
+    BL::Collection b_collection(RNA_pointer_get(&lightgroup, "collection"));
+    bool include_world = get_boolean(lightgroup, "include_world");
+
+    if (!(b_collection || include_world)) {
+      continue;
+    }
+
+    string passname = get_string(lightgroup, "name") + lightgroup_postfix;
+    if (find(lg_names.begin(), lg_names.end(), passname) != lg_names.end()) {
+      continue;
+    }
+    lg_names.push_back(passname);
+
+    b_engine.add_pass(passname.c_str(), 3, "RGB", b_view_layer.name().c_str());
+    Pass::add(PASS_LIGHTGROUP, passes, passname.c_str());
+    lightgroups.push_back(std::make_pair(b_collection, include_world));
+  }
+  RNA_END;
 
   RNA_BEGIN (&crp, b_aov, "aovs") {
     bool is_color = (get_enum(b_aov, "type") == 1);
@@ -851,6 +918,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   if (b_r.use_save_buffers())
     params.progressive_refine = false;
 
+  params.viewport_denoising_samples = get_int(cscene, "viewport_denoising_samples");
+
   if (background) {
     if (params.progressive_refine)
       params.progressive = true;
@@ -883,6 +952,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
 
   params.use_profiling = params.device.has_profiling && !b_engine.is_preview() && background &&
                          BlenderSession::print_render_stats;
+
+  params.adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
 
   return params;
 }

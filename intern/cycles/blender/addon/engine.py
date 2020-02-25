@@ -258,6 +258,7 @@ def list_render_passes(srl):
     if crl.pass_debug_bvh_traversed_instances: yield ("Debug BVH Traversed Instances", "X",   'VALUE')
     if crl.pass_debug_bvh_intersections:       yield ("Debug BVH Intersections",       "X",   'VALUE')
     if crl.pass_debug_ray_bounces:             yield ("Debug Ray Bounces",             "X",   'VALUE')
+    if crl.pass_debug_sample_count:            yield ("Debug Sample Count",            "X",   'VALUE')
     if crl.use_pass_volume_direct:             yield ("VolumeDir",                     "RGB", 'COLOR')
     if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
 
@@ -288,6 +289,14 @@ def list_render_passes(srl):
                              "denoising_subsurface_direct", "denoising_subsurface_indirect")
             if any(getattr(crl, option) for option in clean_options):
                 yield ("Denoising Clean", "RGB", 'COLOR')
+
+    # Light groups.
+    lightgroup_names = []
+    for lightgroup in crl.lightgroups:
+        name = lightgroup.name
+        if (lightgroup.collection or lightgroup.include_world) and not name in lightgroup_names:
+            yield (name + ".Combined", "RGB", 'COLOR')
+            lightgroup_names.append(name)
 
     # Custom AOV passes.
     for aov in crl.aovs:

@@ -190,11 +190,21 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     case PASS_CRYPTOMATTE:
       pass.components = 4;
       break;
+    case PASS_ADAPTIVE_AUX_BUFFER:
+      pass.components = 4;
+      break;
+    case PASS_SAMPLE_COUNT:
+      pass.components = 1;
+      pass.exposure = false;
+      break;
     case PASS_AOV_COLOR:
       pass.components = 4;
       break;
     case PASS_AOV_VALUE:
       pass.components = 1;
+    case PASS_LIGHTGROUP:
+      pass.components = 4;
+      pass.exposure = true;
       break;
     default:
       assert(false);
@@ -318,6 +328,7 @@ NODE_DEFINE(Film)
   SOCKET_BOOLEAN(denoising_clean_pass, "Generate Denoising Clean Pass", false);
   SOCKET_BOOLEAN(denoising_prefiltered_pass, "Generate Denoising Prefiltered Pass", false);
   SOCKET_INT(denoising_flags, "Denoising Flags", 0);
+  SOCKET_BOOLEAN(use_adaptive_sampling, "Use Adaptive Sampling", false);
 
   return type;
 }
@@ -362,6 +373,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->use_light_pass = use_light_visibility;
 
   bool have_cryptomatte = false, have_aov_color = false, have_aov_value = false;
+  int num_lightgroups = 0;
 
   for (size_t i = 0; i < passes.size(); i++) {
     Pass &pass = passes[i];
@@ -498,6 +510,12 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
                                       kfilm->pass_stride;
         have_cryptomatte = true;
         break;
+      case PASS_ADAPTIVE_AUX_BUFFER:
+        kfilm->pass_adaptive_aux_buffer = kfilm->pass_stride;
+        break;
+      case PASS_SAMPLE_COUNT:
+        kfilm->pass_sample_count = kfilm->pass_stride;
+        break;
       case PASS_AOV_COLOR:
         if (!have_aov_color) {
           kfilm->pass_aov_color = kfilm->pass_stride;
@@ -509,6 +527,11 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
           kfilm->pass_aov_value = kfilm->pass_stride;
           have_aov_value = true;
         }
+      case PASS_LIGHTGROUP:
+        kfilm->pass_lightgroup = (num_lightgroups > 0) ?
+                                     min(kfilm->pass_lightgroup, kfilm->pass_stride) :
+                                     kfilm->pass_stride;
+        num_lightgroups++;
         break;
       default:
         assert(false);
@@ -527,6 +550,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
     kfilm->pass_stride += pass.components;
   }
+
+  kfilm->num_lightgroups = min(num_lightgroups, LIGHTGROUPS_MAX);
 
   kfilm->pass_denoising_data = 0;
   kfilm->pass_denoising_clean = 0;
